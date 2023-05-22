@@ -98,6 +98,34 @@ namespace Identity.Controllers
         }
 
         [AllowAnonymous]
+        [HttpPost("google-login")]
+        public async Task<IActionResult> GooleLoginAsync([FromBody] ExternalAuthDto externalAuth)
+        {
+            return Ok(await _userService.GoogleLogin(externalAuth));
+        }
+
+        [AllowAnonymous]
+        [HttpPost("login-2fa")]
+        public async Task<IActionResult> Login2FaAsync([FromBody] UserLoginRequest request)
+        {
+            return Ok(await _userService.LoginWith2FaAsync(request.Email, request.Password));
+        }
+
+        [AllowAnonymous]
+        [HttpPost("get-2fa-token")]
+        public async Task<IActionResult> Get2FaTokenAsync([FromBody] string email)
+        {
+            return Ok(await _userService.Get2FaTokenAsync(email));
+        }
+
+        [AllowAnonymous]
+        [HttpPost("verify-2fa-token")]
+        public async Task<IActionResult> Verify2FaTokenAsync([FromForm] string email, [FromForm] string code)
+        {
+            return Ok(await _userService.Verify2FaTokenAsync(email, code));
+        }
+
+        [AllowAnonymous]
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshTokenAsync([FromBody] TokenDto token)
         {

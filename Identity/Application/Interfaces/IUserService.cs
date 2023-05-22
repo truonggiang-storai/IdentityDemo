@@ -26,5 +26,13 @@ namespace Identity.Application.Interfaces
         Task<bool> UpdatePasswordAsync(string id, string newPass);
 
         Task<bool> DeleteAsync(string id);
+
+        Task<TokenDto> GoogleLogin(ExternalAuthDto externalAuth);
+
+        Task<bool> LoginWith2FaAsync(string email, string password);
+
+        Task<string> Get2FaTokenAsync(string email);
+
+        Task<TokenDto> Verify2FaTokenAsync(string email, string code);
     }
 }

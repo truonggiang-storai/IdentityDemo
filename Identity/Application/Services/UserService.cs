@@ -1,12 +1,18 @@
-﻿using Identity.Application.Dtos;
+﻿using Google.Apis.Auth;
+using Identity.Application.Dtos;
 using Identity.Application.Interfaces;
 using Identity.Domain.Enums;
 using Identity.Domain.Exceptions;
 using Identity.Domain.Models;
 using Identity.Infrastructure.Database.DataRepositories;
+using Identity.Infrastructure.Helpers;
+using Identity.Settings;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Newtonsoft.Json.Linq;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -27,13 +33,16 @@ namespace Identity.Application.Services
 
         private readonly IUnitOfWork _unitOfWork;
 
+        private readonly GoogleSettings _googleSettings;
+
         public UserService(
             UserManager<AppUser> userManager,
             RoleManager<IdentityRole> roleManager,
             IPasswordHasher<AppUser> passwordHasher, 
             ITokenRepository tokenRepository,
             IRefreshTokenRepository refreshTokenRepository,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork,
+            IOptions<GoogleSettings> options)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -41,6 +50,7 @@ namespace Identity.Application.Services
             _tokenRepository = tokenRepository;
             _refreshTokenRepository = refreshTokenRepository;
             _unitOfWork = unitOfWork;
+            _googleSettings = options.Value;
         }
 
         public async Task<TokenDto> RegisterAsync(UserDto user, string password, IList<string>? roles = null, IList<ClaimDto>? claims = null)
@@ -377,6 +387,116 @@ namespace Identity.Application.Services
             }
 
             throw new NotFoundException("User not found.");
+        }
+
+        public async Task<TokenDto> GoogleLogin(ExternalAuthDto externalAuth)
+        {
+            var payload = await VerifyGoogleTokenAsync(externalAuth);
+
+            if (payload != null)
+            {
+                var user = await _userManager.FindByEmailAsync(payload.Email);
+                var addingRoles = new List<string>() { RolesEnum.Member.ToString() };
+
+                if (user == null)
+                {
+                    var creatingUser = new AppUser
+                    {
+                        UserName = payload.Email,
+                        Email = payload.Email
+                    };
+
+                    var rs = await _userManager.CreateAsync(creatingUser, Guid.NewGuid().ToString());
+
+                    if (rs.Succeeded)
+                    {
+                        var newUser = await _userManager.FindByEmailAsync(user.Email);
+                        await AddRoles(newUser, addingRoles);
+
+                        return await _tokenRepository.CreateTokenAsync(GetUserDto(newUser), addingRoles);
+                    }
+
+                    throw new ApplicationException("Something went wrong.");
+                }
+
+                return await _tokenRepository.CreateTokenAsync(GetUserDto(user), addingRoles);
+            }
+
+            throw new ArgumentException("Invalid external authentication.");
+        }
+
+        private async Task<GoogleJsonWebSignature.Payload> VerifyGoogleTokenAsync(ExternalAuthDto externalAuth)
+        {
+            var settings = new GoogleJsonWebSignature.ValidationSettings()
+            {
+                Audience = new List<string>() { _googleSettings.ClientId }
+            };
+
+            var payload = await GoogleJsonWebSignature.ValidateAsync(externalAuth.IdToken, settings);
+            return payload;
+        }
+
+        public async Task<bool> LoginWith2FaAsync(string email, string password)
+        {
+            ValidateEmail(email);
+
+            if (string.IsNullOrEmpty(password))
+            {
+                throw new ArgumentException("Password cannot be empty.");
+            }
+
+            var loginUser = await _userManager.FindByEmailAsync(email);
+
+            if (loginUser != null)
+            {
+                var isPasswordMatched = await _userManager.CheckPasswordAsync(loginUser, password);
+
+                if (isPasswordMatched)
+                {
+                    return true;
+                }
+            }
+
+            throw new ArgumentException($"Invalid credential.");
+        }
+
+        public async Task<string> Get2FaTokenAsync(string email)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user != null)
+            {
+                var token = await _userManager.GenerateTwoFactorTokenAsync(user, TokenOptions.DefaultProvider);
+
+                if (token != null)
+                {
+                    var emailHelper = new EmailHelper();
+                    Task.Run(emailHelper.SendEmailTwoFactorCode(user.Email, token));
+
+                    return token;
+                }
+
+                throw new ApplicationException("Something went wrong.");
+            }
+
+            throw new ArgumentException("User doesn't exist.");
+        }
+
+        public async Task<TokenDto> Verify2FaTokenAsync(string email, string token)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+
+            bool verified = await _userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultProvider, token);
+
+            if (verified)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                var claims = await _userManager.GetClaimsAsync(user);
+
+                return await _tokenRepository.CreateTokenAsync(GetUserDto(user), roles, claims);
+            }
+
+            throw new ArgumentException("OTP does not match, please try again.");
         }
     }
 }

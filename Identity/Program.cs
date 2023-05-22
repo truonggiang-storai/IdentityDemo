@@ -27,6 +27,7 @@ try
 
     // Add configurations
     builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+    builder.Services.Configure<GoogleSettings>(builder.Configuration.GetSection("GoogleApi"));
 
     // Add services to the container.
 
@@ -70,7 +71,7 @@ try
     {
         options.SignIn.RequireConfirmedAccount = false;
         options.User.RequireUniqueEmail = true;
-    }).AddRoles<IdentityRole>().AddEntityFrameworkStores<AppDbContext>();
+    }).AddRoles<IdentityRole>().AddEntityFrameworkStores<AppDbContext>().AddTokenProvider<DataProtectorTokenProvider<AppUser>>(TokenOptions.DefaultProvider);
 
     builder.Services.AddAuthentication(options =>
     {
@@ -100,6 +101,11 @@ try
                 return Task.CompletedTask;
             }
         };
+    }).AddGoogle(opts =>
+    {
+        opts.ClientId = builder.Configuration["GoogleApi:ClientId"];
+        opts.ClientSecret = builder.Configuration["GoogleApi:ClientSecret"];
+        opts.SignInScheme = IdentityConstants.ExternalScheme;
     });
 
     builder.Services.AddAuthorization(options =>
