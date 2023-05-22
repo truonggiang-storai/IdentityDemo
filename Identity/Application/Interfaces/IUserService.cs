@@ -13,9 +13,11 @@ namespace Identity.Application.Interfaces
 
         IList<UserDto> GetAll();
 
-        Task<TokenDto> RegisterAsync(UserDto user, string password, IList<string>? roles = null);
+        Task<TokenDto> RegisterAsync(UserDto user, string password, IList<string>? roles = null, IList<ClaimDto>? claims = null);
 
         Task<bool> AddUserToRolesAsync(string email, IList<string> roles);
+
+        Task<bool> AddClaimAsync(string email, string claimType, string claimValue);
 
         Task<TokenDto> LoginAsync(string email, string password);
 

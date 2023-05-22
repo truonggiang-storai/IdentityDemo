@@ -28,6 +28,7 @@ namespace Identity.Controllers
             return Ok("Get resource by role successful.");
         }
 
+        [Authorize(Policy = "ExampleClaimPolicy")]
         [HttpGet("claim-base-authorize")]
         public IActionResult GetClaimBaseResult()
         {
@@ -68,14 +69,24 @@ namespace Identity.Controllers
                 Name = request.Name
             };
 
-            return Ok(await _userService.RegisterAsync(userDto, request.Password, request.Roles.ToList()));
+            return Ok(await _userService.RegisterAsync(userDto, request.Password, request.Roles.ToList(), request.Claims.ToList()));
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("add-role")]
-        public async Task<IActionResult> AddRoleAsync([FromForm] string email, [FromForm] IList<string> roles)
+        [HttpPost("add-roles")]
+        public async Task<IActionResult> AddRolesAsync([FromForm] string email, [FromForm] IList<string> roles)
         {
             return Ok(await _userService.AddUserToRolesAsync(email, roles));
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("add-claim")]
+        public async Task<IActionResult> AddClaimAsync(
+            [FromForm] string email, 
+            [FromForm] string claimType,
+            [FromForm] string claimValue)
+        {
+            return Ok(await _userService.AddClaimAsync(email, claimType, claimValue));
         }
 
         [AllowAnonymous]

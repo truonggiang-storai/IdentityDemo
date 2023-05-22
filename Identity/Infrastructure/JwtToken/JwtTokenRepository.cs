@@ -5,6 +5,7 @@ using Identity.Settings;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Data;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -30,12 +31,12 @@ namespace Identity.Infrastructure.JwtToken
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<TokenDto> CreateTokenAsync(UserDto user, IList<string> roles)
+        public async Task<TokenDto> CreateTokenAsync(UserDto user, IList<string> roles, IList<Claim>? additionalClaims = null)
         {
             var expiration = DateTime.UtcNow.AddSeconds(double.Parse(_jwtSettings.TokenValidityInSeconds));
 
             var token = CreateJwtToken(
-                CreateClaims(user, roles),
+                CreateClaims(user, roles, additionalClaims),
                 CreateSigningCredentials(),
                 expiration
             );
@@ -70,7 +71,7 @@ namespace Identity.Infrastructure.JwtToken
                 signingCredentials: credentials
             );
 
-        private Claim[] CreateClaims(UserDto user, IList<string> roles)
+        private Claim[] CreateClaims(UserDto user, IList<string> roles, IList<Claim>? additionalClaims = null)
         {
             var claims = new List<Claim>()
             {
@@ -85,6 +86,14 @@ namespace Identity.Infrastructure.JwtToken
             foreach (var role in roles)
             {
                 claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            if (additionalClaims != null && additionalClaims.Any())
+            {
+                foreach (var claim in additionalClaims)
+                {
+                    claims.Add(claim);
+                }
             }
 
             return claims.ToArray();

@@ -1,4 +1,6 @@
-﻿namespace Identity.Requests
+﻿using Identity.Application.Dtos;
+
+namespace Identity.Requests
 {
     public class UserRegisterRequest
     {
@@ -9,5 +11,7 @@
         public string Password { get; set; }
 
         public ICollection<string>? Roles { get; set; } = new List<string>();
+
+        public ICollection<ClaimDto> Claims { get; set; } = new List<ClaimDto>();
     }
 }

@@ -43,7 +43,7 @@ namespace Identity.Application.Services
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<TokenDto> RegisterAsync(UserDto user, string password, IList<string>? roles = null)
+        public async Task<TokenDto> RegisterAsync(UserDto user, string password, IList<string>? roles = null, IList<ClaimDto>? claims = null)
         {
             var foundUserByEmail = await _userManager.FindByEmailAsync(user.Email);
             var foundUserByUserName = await _userManager.FindByNameAsync(user.Name);
@@ -58,6 +58,7 @@ namespace Identity.Application.Services
 
                 ValidateUser(user, password);
                 ValidateRoles(roles);
+                ValidateClaims(claims);
 
                 var rs = await _userManager.CreateAsync(appUser, password);
 
@@ -65,15 +66,11 @@ namespace Identity.Application.Services
                 {
                     var newUser = await _userManager.FindByEmailAsync(user.Email);
                     var addingRoles = roles != null && roles.Any() ? roles : new List<string>() { RolesEnum.Member.ToString() };
+                    await AddRoles(newUser, addingRoles);
+                    await AddClaims(newUser, claims);
+                    var addedClaims = await _userManager.GetClaimsAsync(newUser);
 
-                    var addRolesResult = await _userManager.AddToRolesAsync(newUser, addingRoles);
-
-                    if (addRolesResult.Succeeded)
-                    {
-                        return await _tokenRepository.CreateTokenAsync(GetUserDto(newUser), addingRoles);
-                    }
-
-                    throw new ApplicationException("Add role failed.");
+                    return await _tokenRepository.CreateTokenAsync(GetUserDto(newUser), addingRoles, addedClaims);
                 }
 
                 throw new ApplicationException("Something went wrong.");
@@ -92,6 +89,14 @@ namespace Identity.Application.Services
             }
         }
 
+        private void ValidateClaims(IList<ClaimDto>? claims)
+        {
+            if (claims != null && claims.Any(c => string.IsNullOrEmpty(c.Type) || string.IsNullOrEmpty(c.Value)))
+            {
+                throw new ArgumentException($"Claim type and value must not be empty.");
+            }
+        }
+
         public async Task<bool> AddUserToRolesAsync(string email, IList<string> roles)
         {
             var user = await _userManager.FindByEmailAsync(email);
@@ -101,6 +106,49 @@ namespace Identity.Application.Services
                 ValidateRoles(roles);
 
                 var result = await _userManager.AddToRolesAsync(user, roles);
+
+                if (result.Succeeded)
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            throw new ArgumentException("User doesn't exists.");
+        }
+
+        private async Task AddRoles(AppUser user, IList<string> roles)
+        {
+            var addRolesResult = await _userManager.AddToRolesAsync(user, roles);
+
+            if (!addRolesResult.Succeeded)
+            {
+                throw new ApplicationException("Add roles failed.");
+            }
+        }
+
+        private async Task AddClaims(AppUser user, IList<ClaimDto> claimsInput)
+        {
+            var claims = claimsInput.Select(c => new Claim(c.Type, c.Value));
+
+            var addClaimsResult = await _userManager.AddClaimsAsync(user, claims);
+
+            if (!addClaimsResult.Succeeded)
+            {
+                throw new ApplicationException("Add claims failed.");
+            }
+        }
+
+        public async Task<bool> AddClaimAsync(string email, string claimType, string claimValue)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user != null)
+            {
+                var claim = new Claim(claimType, claimValue);
+
+                var result = await _userManager.AddClaimAsync(user, claim);
 
                 if (result.Succeeded)
                 {
@@ -131,8 +179,9 @@ namespace Identity.Application.Services
                 if (isPasswordMatched)
                 {
                     var roles = await _userManager.GetRolesAsync(loginUser);
+                    var claims = await _userManager.GetClaimsAsync(loginUser);
 
-                    return await _tokenRepository.CreateTokenAsync(GetUserDto(loginUser), roles);
+                    return await _tokenRepository.CreateTokenAsync(GetUserDto(loginUser), roles, claims);
                 }
             }
 

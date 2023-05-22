@@ -100,7 +100,10 @@ try
         };
     });
 
-    builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("ExampleClaimPolicy", policy => policy.RequireClaim("ExampleClaim"));
+    });
 
     builder.Services.AddScoped<UserManager<AppUser>>();
     builder.Services.AddScoped<RoleManager<IdentityRole>>();
