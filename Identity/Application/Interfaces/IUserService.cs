@@ -34,5 +34,13 @@ namespace Identity.Application.Interfaces
         Task<string> Get2FaTokenAsync(string email);
 
         Task<TokenDto> Verify2FaTokenAsync(string email, string code);
+
+        Task<bool> RegisterWithEmailConfirmAsync(UserDto user, string password, IList<string>? roles = null, IList<ClaimDto>? claims = null);
+
+        Task<bool> ResendVerificationEmail(string email);
+
+        Task<TokenDto> VerifyEmailTokenAsync(string email, string token);
+
+        Task<TokenDto> LoginRequireEmailConfirmAsync(string email, string password);
     }
 }

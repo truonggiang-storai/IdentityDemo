@@ -69,7 +69,7 @@ try
 
     builder.Services.AddIdentityCore<AppUser>(options =>
     {
-        options.SignIn.RequireConfirmedAccount = false;
+        options.SignIn.RequireConfirmedAccount = true;
         options.User.RequireUniqueEmail = true;
     }).AddRoles<IdentityRole>().AddEntityFrameworkStores<AppDbContext>().AddTokenProvider<DataProtectorTokenProvider<AppUser>>(TokenOptions.DefaultProvider);
 

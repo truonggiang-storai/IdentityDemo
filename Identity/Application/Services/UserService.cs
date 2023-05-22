@@ -471,7 +471,7 @@ namespace Identity.Application.Services
                 if (token != null)
                 {
                     var emailHelper = new EmailHelper();
-                    Task.Run(emailHelper.SendEmailTwoFactorCode(user.Email, token));
+                    bool emailResponse = emailHelper.SendEmailTwoFactorCode(user.Email, token);
 
                     return token;
                 }
@@ -497,6 +497,124 @@ namespace Identity.Application.Services
             }
 
             throw new ArgumentException("OTP does not match, please try again.");
+        }
+
+        public async Task<bool> RegisterWithEmailConfirmAsync(UserDto user, string password, IList<string>? roles = null, IList<ClaimDto>? claims = null)
+        {
+            var foundUserByEmail = await _userManager.FindByEmailAsync(user.Email);
+            var foundUserByUserName = await _userManager.FindByNameAsync(user.Name);
+
+            if (foundUserByEmail == null && foundUserByUserName == null)
+            {
+                var appUser = new AppUser
+                {
+                    UserName = user.Name,
+                    Email = user.Email
+                };
+
+                ValidateUser(user, password);
+                ValidateRoles(roles);
+                ValidateClaims(claims);
+
+                var rs = await _userManager.CreateAsync(appUser, password);
+
+                if (rs.Succeeded)
+                {
+                    var newUser = await _userManager.FindByEmailAsync(user.Email);
+                    var addingRoles = roles != null && roles.Any() ? roles : new List<string>() { RolesEnum.Member.ToString() };
+                    await AddRoles(newUser, addingRoles);
+                    await AddClaims(newUser, claims);
+
+                    var token = await _userManager.GenerateEmailConfirmationTokenAsync(newUser);
+
+                    if (token != null)
+                    {
+                        var emailHelper = new EmailHelper();
+                        bool emailResponse = emailHelper.SendEmailTwoFactorCode(user.Email, token);
+
+                        return true;
+                    }
+                }
+
+                throw new ApplicationException("Something went wrong.");
+            }
+
+            throw new ArgumentException("User with email exists, please try another email.");
+        }
+
+        public async Task<bool> ResendVerificationEmail(string email)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user != null)
+            {
+                var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+
+                if (token != null)
+                {
+                    var emailHelper = new EmailHelper();
+                    bool emailResponse = emailHelper.SendEmailTwoFactorCode(user.Email, token);
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            throw new ArgumentException("User doesn't exist.");
+        }
+
+        public async Task<TokenDto> VerifyEmailTokenAsync(string email, string token)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+
+            var result = await _userManager.ConfirmEmailAsync(user, token);
+
+            if (result.Succeeded)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                var claims = await _userManager.GetClaimsAsync(user);
+
+                return await _tokenRepository.CreateTokenAsync(GetUserDto(user), roles, claims);
+            }
+
+            throw new ArgumentException("Email verification failed, please try again.");
+        }
+
+        public async Task<TokenDto> LoginRequireEmailConfirmAsync(string email, string password)
+        {
+            ValidateEmail(email);
+
+            if (string.IsNullOrEmpty(password))
+            {
+                throw new ArgumentException("Password cannot be empty.");
+            }
+
+            var loginUser = await _userManager.FindByEmailAsync(email);
+
+            if (loginUser != null)
+            {
+                var isEmailConfirmed = loginUser.EmailConfirmed;
+
+                if (isEmailConfirmed)
+                {
+                    var isPasswordMatched = await _userManager.CheckPasswordAsync(loginUser, password);
+
+                    if (isPasswordMatched)
+                    {
+                        var roles = await _userManager.GetRolesAsync(loginUser);
+                        var claims = await _userManager.GetClaimsAsync(loginUser);
+
+                        return await _tokenRepository.CreateTokenAsync(GetUserDto(loginUser), roles, claims);
+                    }
+
+                    throw new ArgumentException($"Invalid credential.");
+                }
+
+                throw new ArgumentException($"User have not been verified.");
+            }
+
+            throw new ArgumentException($"Invalid credential.");
         }
     }
 }

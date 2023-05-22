@@ -5,7 +5,7 @@ namespace Identity.Infrastructure.Helpers
 {
     public class EmailHelper
     {
-        public async Task<bool> SendEmailTwoFactorCodeAsync(string userEmail, string code)
+        public bool SendEmailTwoFactorCode(string userEmail, string code)
         {
             MailMessage mailMessage = new MailMessage();
             mailMessage.From = new MailAddress("admin@test.com");
@@ -24,7 +24,7 @@ namespace Identity.Infrastructure.Helpers
 
             try
             {
-                await client.SendAsync(mailMessage);
+                client.Send(mailMessage);
                 return true;
             }
             catch (Exception ex)
