@@ -5,8 +5,10 @@ using Identity.Domain.Models;
 using Identity.Infrastructure.Database.Contexts;
 using Identity.Infrastructure.Database.DataRepositories;
 using Identity.Infrastructure.JwtToken;
+using Identity.Policies;
 using Identity.Settings;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -103,6 +105,10 @@ try
     builder.Services.AddAuthorization(options =>
     {
         options.AddPolicy("ExampleClaimPolicy", policy => policy.RequireClaim("ExampleClaim"));
+        options.AddPolicy("AllowSuperUserPolicy", policy =>
+        {
+            policy.AddRequirements(new AllowSuperUserPolicy("superuser"));
+        });
     });
 
     builder.Services.AddScoped<UserManager<AppUser>>();
@@ -113,6 +119,8 @@ try
     builder.Services.AddScoped<ITokenRepository, JwtTokenRepository>();
     builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
     builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+
+    builder.Services.AddTransient<IAuthorizationHandler, AllowSuperUserHandler>();
 
     var app = builder.Build();
 

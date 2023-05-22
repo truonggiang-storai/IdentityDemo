@@ -35,6 +35,7 @@ namespace Identity.Controllers
             return Ok("Get resource by claim successful.");
         }
 
+        [Authorize(Policy = "AllowSuperUserPolicy")]
         [HttpGet("policy-base-authorize")]
         public IActionResult GetPolicyBaseResult()
         {
