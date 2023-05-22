@@ -1,7 +1,10 @@
 using Identity.Application.Dtos;
 using Identity.Application.Interfaces;
+using Identity.Domain.Enums;
+using Identity.Domain.Models;
 using Identity.Requests;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Identity.Controllers
@@ -11,11 +14,30 @@ namespace Identity.Controllers
     [Route("api/users")]
     public class UserController : ControllerBase
     {
-        private IUserService _userService;
+        private readonly IUserService _userService;
 
         public UserController(IUserService userService)
         {
             _userService = userService;
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet("role-base-authorize")]
+        public IActionResult GetRoleBaseResult() 
+        {
+            return Ok("Get resource by role successful.");
+        }
+
+        [HttpGet("claim-base-authorize")]
+        public IActionResult GetClaimBaseResult()
+        {
+            return Ok("Get resource by claim successful.");
+        }
+
+        [HttpGet("policy-base-authorize")]
+        public IActionResult GetPolicyBaseResult()
+        {
+            return Ok("Get resource by policy successful.");
         }
 
         [HttpGet("{id}")]
@@ -46,7 +68,14 @@ namespace Identity.Controllers
                 Name = request.Name
             };
 
-            return Ok(await _userService.RegisterAsync(userDto, request.Password));
+            return Ok(await _userService.RegisterAsync(userDto, request.Password, request.Roles.ToList()));
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("add-role")]
+        public async Task<IActionResult> AddRoleAsync([FromForm] string email, [FromForm] IList<string> roles)
+        {
+            return Ok(await _userService.AddUserToRolesAsync(email, roles));
         }
 
         [AllowAnonymous]

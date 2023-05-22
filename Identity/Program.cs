@@ -64,13 +64,16 @@ try
         options.UseSqlServer(builder.Configuration["ConnectionStrings:DefaultConnection"]);
     });
 
-    builder.Services.AddIdentity<AppUser, IdentityRole>().AddEntityFrameworkStores<AppDbContext>().AddDefaultTokenProviders();
+    builder.Services.AddIdentityCore<AppUser>(options =>
+    {
+        options.SignIn.RequireConfirmedAccount = false;
+        options.User.RequireUniqueEmail = true;
+    }).AddRoles<IdentityRole>().AddEntityFrameworkStores<AppDbContext>();
 
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
     }).AddJwtBearer(o =>
     {
         o.SaveToken = true;
@@ -98,6 +101,9 @@ try
     });
 
     builder.Services.AddAuthorization();
+
+    builder.Services.AddScoped<UserManager<AppUser>>();
+    builder.Services.AddScoped<RoleManager<IdentityRole>>();
 
     builder.Services.AddScoped<IUserService, UserService>();
 

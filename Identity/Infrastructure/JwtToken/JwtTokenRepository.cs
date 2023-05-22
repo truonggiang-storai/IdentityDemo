@@ -30,12 +30,12 @@ namespace Identity.Infrastructure.JwtToken
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<TokenDto> CreateTokenAsync(UserDto user)
+        public async Task<TokenDto> CreateTokenAsync(UserDto user, IList<string> roles)
         {
             var expiration = DateTime.UtcNow.AddSeconds(double.Parse(_jwtSettings.TokenValidityInSeconds));
 
             var token = CreateJwtToken(
-                CreateClaims(user),
+                CreateClaims(user, roles),
                 CreateSigningCredentials(),
                 expiration
             );
@@ -70,8 +70,9 @@ namespace Identity.Infrastructure.JwtToken
                 signingCredentials: credentials
             );
 
-        private Claim[] CreateClaims(UserDto user) =>
-            new[] 
+        private Claim[] CreateClaims(UserDto user, IList<string> roles)
+        {
+            var claims = new List<Claim>()
             {
                 new Claim(JwtRegisteredClaimNames.Sub, _jwtSettings.Subject),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
@@ -80,6 +81,15 @@ namespace Identity.Infrastructure.JwtToken
                 new Claim(ClaimTypes.Name, user.Name),
                 new Claim(ClaimTypes.Email, user.Email)
             };
+
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            return claims.ToArray();
+        }
+            
 
         private SigningCredentials CreateSigningCredentials() =>
             new SigningCredentials(

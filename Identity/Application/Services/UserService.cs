@@ -1,10 +1,12 @@
 ﻿using Identity.Application.Dtos;
 using Identity.Application.Interfaces;
+using Identity.Domain.Enums;
 using Identity.Domain.Exceptions;
 using Identity.Domain.Models;
 using Identity.Infrastructure.Database.DataRepositories;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -15,6 +17,8 @@ namespace Identity.Application.Services
     {
         private readonly UserManager<AppUser> _userManager;
 
+        private readonly RoleManager<IdentityRole> _roleManager;
+
         private readonly IPasswordHasher<AppUser> _passwordHasher;
 
         private readonly ITokenRepository _tokenRepository;
@@ -24,39 +28,89 @@ namespace Identity.Application.Services
         private readonly IUnitOfWork _unitOfWork;
 
         public UserService(
-            UserManager<AppUser> userManager, 
+            UserManager<AppUser> userManager,
+            RoleManager<IdentityRole> roleManager,
             IPasswordHasher<AppUser> passwordHasher, 
             ITokenRepository tokenRepository,
             IRefreshTokenRepository refreshTokenRepository,
             IUnitOfWork unitOfWork)
         {
             _userManager = userManager;
+            _roleManager = roleManager;
             _passwordHasher = passwordHasher;
             _tokenRepository = tokenRepository;
             _refreshTokenRepository = refreshTokenRepository;
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<TokenDto> RegisterAsync(UserDto user, string password)
+        public async Task<TokenDto> RegisterAsync(UserDto user, string password, IList<string>? roles = null)
         {
-            var appUser = new AppUser
+            var foundUserByEmail = await _userManager.FindByEmailAsync(user.Email);
+            var foundUserByUserName = await _userManager.FindByNameAsync(user.Name);
+
+            if (foundUserByEmail == null && foundUserByUserName == null)
             {
-                UserName = user.Name,
-                Email = user.Email
-            };
+                var appUser = new AppUser
+                {
+                    UserName = user.Name,
+                    Email = user.Email
+                };
 
-            ValidateUser(user, password);
+                ValidateUser(user, password);
+                ValidateRoles(roles);
 
-            var rs = await _userManager.CreateAsync(appUser, password);
+                var rs = await _userManager.CreateAsync(appUser, password);
 
-            if (rs.Succeeded)
-            {
-                var newUser = await _userManager.FindByEmailAsync(user.Email);
+                if (rs.Succeeded)
+                {
+                    var newUser = await _userManager.FindByEmailAsync(user.Email);
+                    var addingRoles = roles != null && roles.Any() ? roles : new List<string>() { RolesEnum.Member.ToString() };
 
-                return await _tokenRepository.CreateTokenAsync(GetUserDto(newUser));
+                    var addRolesResult = await _userManager.AddToRolesAsync(newUser, addingRoles);
+
+                    if (addRolesResult.Succeeded)
+                    {
+                        return await _tokenRepository.CreateTokenAsync(GetUserDto(newUser), addingRoles);
+                    }
+
+                    throw new ApplicationException("Add role failed.");
+                }
+
+                throw new ApplicationException("Something went wrong.");
             }
 
-            throw new ApplicationException("Something went wrong.");
+            throw new ArgumentException("User with email exists, please try another email.");
+        }
+
+        private void ValidateRoles(IList<string> roles)
+        {
+            var allRoles = _roleManager.Roles.Select(r => r.Name).ToList();
+
+            if (roles != null && roles.Any(r => !allRoles.Contains(r)))
+            {
+                throw new ArgumentException($"Roles must belong to this list: {string.Join(", ", allRoles)}.");
+            }
+        }
+
+        public async Task<bool> AddUserToRolesAsync(string email, IList<string> roles)
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user != null)
+            {
+                ValidateRoles(roles);
+
+                var result = await _userManager.AddToRolesAsync(user, roles);
+
+                if (result.Succeeded)
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            throw new ArgumentException("User doesn't exists.");
         }
 
         public async Task<TokenDto> LoginAsync(string email, string password)
@@ -76,7 +130,9 @@ namespace Identity.Application.Services
 
                 if (isPasswordMatched)
                 {
-                    return await _tokenRepository.CreateTokenAsync(GetUserDto(loginUser));
+                    var roles = await _userManager.GetRolesAsync(loginUser);
+
+                    return await _tokenRepository.CreateTokenAsync(GetUserDto(loginUser), roles);
                 }
             }
 
@@ -110,8 +166,9 @@ namespace Identity.Application.Services
 
                         var email = principal.Claims.Single(p => p.Type == ClaimTypes.Email).Value;
                         var user = await _userManager.FindByEmailAsync(email);
+                        var roles = await _userManager.GetRolesAsync(user);
 
-                        var resource = await _tokenRepository.CreateTokenAsync(GetUserDto(user));
+                        var resource = await _tokenRepository.CreateTokenAsync(GetUserDto(user), roles);
                         return resource;
                     }
 
